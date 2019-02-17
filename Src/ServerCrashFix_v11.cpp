@@ -18,6 +18,9 @@
 void SCFInit();
 void SCFFini();
 
+#define DLL_PROCESS_ATTACH 1
+#define DLL_PROCESS_DETACH 0
+
 /*-----------------------------------------------------------------------------
 	Implementation definitions - Does NOT need to be modified between versions.
 	Edit ServerCrashFix_Private instead!!!
@@ -27,7 +30,7 @@ void SCFFini();
 #undef IMPLEMENT_PACKAGE_PLATFORM
 #define IMPLEMENT_PACKAGE_PLATFORM(pkgname) \
 	extern "C" {HINSTANCE hInstance;} \
-	INT DLL_EXPORT STDCALL DllMain( HINSTANCE hInInstance, DWORD Reason, void* Reserved ) \
+	DLL_EXPORT INT STDCALL DllMain( HINSTANCE hInInstance, DWORD Reason, void* Reserved ) \
 	{\
 		hInstance = hInInstance;\
 		if (Reason == DLL_PROCESS_ATTACH)\
@@ -60,18 +63,14 @@ IMPLEMENT_CLASS(ASCFNative);
 	Secure DynamicLoadObject Implementation - Initial Hooking is done elsewhere!
 	Intercepts DLO call, checks arguments, unhooks, calls original function, rehooks
 -----------------------------------------------------------------------------*/
-void DLOHook::NewFunc(FFrame& Stack, RESULT_DECL)
-{
+void DLOHook::NewFunc(FFrame& Stack, RESULT_DECL) {
 	guard(DLOHook::NewFunc);
 	BYTE *oldCode = Stack.Code; // Save stack position! Needs to be restored later!
 	P_GET_STR(TheClass);
 	P_GET_UBOOL(bMayFail);
 
-	//GLog->Logf(TEXT("[SCF] DLO: %s"), *TheClass);
-
 	// Malformed string!
-	if (TheClass.InStr(TEXT("%")) != -1)
-	{
+	if (TheClass.InStr(TEXT("%")) != -1) {
 		GLog->Logf(TEXT("[SCF] Prevented the following class from loading -> %s (possible malformed string exploit)"),*TheClass);
 		P_FINISH;
 		return;
@@ -87,16 +86,14 @@ void DLOHook::NewFunc(FFrame& Stack, RESULT_DECL)
 /*-----------------------------------------------------------------------------
 	Meh
 -----------------------------------------------------------------------------*/
-Native DLOHook::GetNewFunc()
-{
+Native DLOHook::GetNewFunc() {
 	return static_cast<Native>(&DLOHook::NewFunc);
 }
 
 /*-----------------------------------------------------------------------------
 	Secure execConsoleCommand
 -----------------------------------------------------------------------------*/
-void ExecHook::NewFunc(FFrame& Stack, RESULT_DECL)
-{
+void ExecHook::NewFunc(FFrame& Stack, RESULT_DECL) {
 	guard(ExecHook::NewFunc);
 	P_GET_STR(ConsoleCommand);
 	P_FINISH;
@@ -106,20 +103,17 @@ void ExecHook::NewFunc(FFrame& Stack, RESULT_DECL)
 
 	GLog->Logf(TEXT("Intercepted ConsoleCommand: %s from func: %s"), *ConsoleCommand, Stack.Node->GetFullName());
 
-	if (ParseCommand(&Str, TEXT("GET")))
-	{
+	if (ParseCommand(&Str, TEXT("GET"))) {
 		// Get a class default variable.
 		TCHAR ClassName[256], PropertyName[256];
 		UClass* Class;
 		UProperty* Property;
 		if
 		(	ParseToken( Str, ClassName, ARRAY_COUNT(ClassName), 1 )
-		&&	(Class=FindObject<UClass>( ANY_PACKAGE, ClassName))!=NULL )
-		{
+		&&	(Class=FindObject<UClass>( ANY_PACKAGE, ClassName))!=NULL ) {
 			if
 			(	ParseToken( Str, PropertyName, ARRAY_COUNT(PropertyName), 1 )
-			&&	(Property=FindField<UProperty>( Class, PropertyName))!=NULL )
-			{
+			&&	(Property=FindField<UProperty>( Class, PropertyName))!=NULL ) {
 				TCHAR* Temp = new TCHAR[65536];
 				if( Class->Defaults.Num() )
 					Property->ExportText( 0, Temp, (BYTE*)&Class->Defaults(0), (BYTE*)&Class->Defaults(0), PPF_Localized );
@@ -133,8 +127,7 @@ void ExecHook::NewFunc(FFrame& Stack, RESULT_DECL)
 	}
 	else
 	{
-		for (TObjectIterator<UGameEngine> It; It; ++It)
-		{
+		for (TObjectIterator<UGameEngine> It; It; ++It) {
 			It->Exec(Str, OutString);
 			*(FString*)Result = *OutString;
 			break;
@@ -146,16 +139,14 @@ void ExecHook::NewFunc(FFrame& Stack, RESULT_DECL)
 /*-----------------------------------------------------------------------------
 	Meh
 -----------------------------------------------------------------------------*/
-Native ExecHook::GetNewFunc()
-{
+Native ExecHook::GetNewFunc() {
 	return static_cast<Native>(&ExecHook::NewFunc);
 }
 
 /*-----------------------------------------------------------------------------
 	FNetworkNotifyHook::NotifyReceivedText - Secure NotifyReceivedText Implementation
 -----------------------------------------------------------------------------*/
-void FNetworkNotifyHook::NotifyReceivedText(UNetConnection* Connection, const TCHAR* Text)
-{
+void FNetworkNotifyHook::NotifyReceivedText(UNetConnection* Connection, const TCHAR* Text) {
 	guard(FNetworkNotifyHook::NotifyReceivedText);
 
 	FString TempStr = FString(Text);
@@ -179,8 +170,7 @@ void FNetworkNotifyHook::NotifyReceivedText(UNetConnection* Connection, const TC
 
 	//GLog->Logf(TEXT("[SCF] NotifyReceivedText (%s): %s"),*Connection->URL.Host,*TempStr);
 
-	if (Connection != NULL && useBanList && banList.InStr(Connection->URL.Host) != -1)
-	{
+	if (Connection != NULL && useBanList && banList.InStr(Connection->URL.Host) != -1) {
 		//GLog->Logf(TEXT("[SCF] Request from temporarily banned IP ( %s ) : %s "),Connection->URL.Host,TempStr);
 		//GLog->Logf(TEXT("[SCF] REQUEST IGNORED"));
 		return;
@@ -190,38 +180,32 @@ void FNetworkNotifyHook::NotifyReceivedText(UNetConnection* Connection, const TC
 		|| TempStr.Left(6).Caps() == FString(TEXT("BADBOY"))
 		|| TempStr.Left(6).Caps() == FString(TEXT("REPEAT"))
 		|| TempStr.Left(10).Caps() == FString(TEXT("CRITOBJCNT"))
-		|| TempStr.Left(4).Caps() == FString(TEXT("AUTH")))
-	{
+		|| TempStr.Left(4).Caps() == FString(TEXT("AUTH"))) {
 		ReasonStr = FString::Printf(TEXT("Illegal Command: %s"),*TempStr);
 		CloseConnection(Connection,ReasonStr);
 		return;
 	}
 	// Illegal options
-	else if (TempStr.InStr(TEXT("%")) != -1 && TempStr.Left(14).Caps() != FString(TEXT("LOGIN RESPONSE")))
-	{
+	else if (TempStr.InStr(TEXT("%")) != -1 && TempStr.Left(14).Caps() != FString(TEXT("LOGIN RESPONSE"))) {
 		ReasonStr = FString::Printf(TEXT("Illegal Command: %s (Possible Malformed String Exploit)"),*TempStr);
 		CloseConnection(Connection,ReasonStr);
 		return;
 	}
 	// Empty join request
-	else if (TempStr.Left(4).Caps() == FString(TEXT("JOIN")) && Connection->RequestURL.Len() <= 3)
-	{
+	else if (TempStr.Left(4).Caps() == FString(TEXT("JOIN")) && Connection->RequestURL.Len() <= 3) {
 		ReasonStr = FString::Printf(TEXT("Illegal Join Request: %s (Fake Player DoS)"),*TempStr);
 		CloseConnection(Connection,ReasonStr);
 		return;
 	}
 	// Double checks on LOGIN RESPONSE -> % in classes, empty url
-	else if (TempStr.Left(14) == FString(TEXT("LOGIN RESPONSE")))
-	{
+	else if (TempStr.Left(14) == FString(TEXT("LOGIN RESPONSE"))) {
 		// Check URL field
 		Offset = TempStr.InStr(TEXT("URL="));
-		if (Offset != -1)
-		{
+		if (Offset != -1) {
 			TempStr = TempStr.Mid(Offset+4);
 
 			// (Almost empty) => illegal option
-			if (TempStr.Len() <= 3)
-			{
+			if (TempStr.Len() <= 3) {
 				ReasonStr = FString::Printf(TEXT("Illegal Login Response URL: %s (Incorrect Format)"),*TempStr);
 				CloseConnection(Connection,ReasonStr);
 				return;
@@ -237,21 +221,18 @@ void FNetworkNotifyHook::NotifyReceivedText(UNetConnection* Connection, const TC
 		// Parse out the Name field
 		// At this point the TempStr looks like ?prop1=<val1>?prop2=<val2>?...?Name=<PlayerName>?propN=<valN>
 		Offset = TempStr.InStr(TEXT("?Name="));
-		if (Offset != -1)
-		{
+		if (Offset != -1) {
 			NameStr = TempStr.Mid(Offset+6);
 			TempStr = TempStr.Left(Offset);
 			Offset = NameStr.InStr(TEXT("?"));
-			if (Offset != -1)
-			{
+			if (Offset != -1) {
 				TempStr += NameStr.Mid(Offset);
 				NameStr = NameStr.Left(Offset);
 			}
 		}
 
 		// At this point the TempStr looks like ?prop1=<val1>?prop2=<val2>?...?propN=<valN>
-		if (TempStr.InStr(TEXT("%")) != -1)
-		{
+		if (TempStr.InStr(TEXT("%")) != -1) {
 			ReasonStr = FString::Printf(TEXT("Illegal Login Response URL: %s (Possible Malformed String Exploit)"),*TempStr);
 			CloseConnection(Connection,ReasonStr);
 			return;
@@ -272,15 +253,13 @@ void FNetworkNotifyHook::NotifyReceivedText(UNetConnection* Connection, const TC
 /*-----------------------------------------------------------------------------
 	FNetworkNotifyHook::NotifyAcceptedConnection - Secure NotifyAcceptedConnection Implementation
 -----------------------------------------------------------------------------*/
-void FNetworkNotifyHook::NotifyAcceptedConnection(UNetConnection* Connection)
-{
+void FNetworkNotifyHook::NotifyAcceptedConnection(UNetConnection* Connection) {
 	guard(FNetworkNotifyHook::NotifyAcceptedConnection);
 
 	//GLog->Logf(TEXT("[SCF] NotifyAcceptedConnection: %s"), *Connection->URL.Host);
 
 	// Ignore banned ip's ;)
-	if (Connection != NULL && useBanList && banList.InStr(Connection->URL.Host) != -1)
-	{
+	if (Connection != NULL && useBanList && banList.InStr(Connection->URL.Host) != -1) {
 		return;
 	}
 
@@ -292,13 +271,11 @@ void FNetworkNotifyHook::NotifyAcceptedConnection(UNetConnection* Connection)
 /*-----------------------------------------------------------------------------
 	FNetworkNotifyHook::NotifyAcceptingChannel - Secure NotifyAcceptingChannel Implementation
 -----------------------------------------------------------------------------*/
-UBOOL FNetworkNotifyHook::NotifyAcceptingChannel(UChannel* Channel)
-{
+UBOOL FNetworkNotifyHook::NotifyAcceptingChannel(UChannel* Channel) {
 	guard(FNetworkNotifyHook::NotifyAcceptingChannel);
 
 	// Ignore banned ip's ;)
-	if (Channel->Connection != NULL && useBanList && banList.InStr(Channel->Connection->URL.Host) != -1)
-	{
+	if (Channel->Connection != NULL && useBanList && banList.InStr(Channel->Connection->URL.Host) != -1) {
 		// Reply to the server crash tool with a malformed string to shut down the tool ;)
 		Channel->Connection->Logf(TEXT("UPGRADE LOL"));
 		return false;
@@ -312,8 +289,7 @@ UBOOL FNetworkNotifyHook::NotifyAcceptingChannel(UChannel* Channel)
 /*-----------------------------------------------------------------------------
 	FNetworkNotifyHook::CloseConnection - Close a connection and log why!
 -----------------------------------------------------------------------------*/
-void FNetworkNotifyHook::CloseConnection( UNetConnection* Connection, FString Reason )
-{
+void FNetworkNotifyHook::CloseConnection( UNetConnection* Connection, FString Reason ) {
 	guard(FNetworkNotifyHook::CloseConnection);
 
 	FString ConStr;
@@ -322,8 +298,7 @@ void FNetworkNotifyHook::CloseConnection( UNetConnection* Connection, FString Re
 	else
 		ConStr = FString(TEXT("No IP Found"));
 
-	if (Connection != NULL)
-	{
+	if (Connection != NULL) {
 		// Log!
 		GLog->Logf(TEXT("================================================================================"));
 		GLog->Logf(TEXT("[SCF] A player has been prevented access from the server."));
@@ -335,8 +310,7 @@ void FNetworkNotifyHook::CloseConnection( UNetConnection* Connection, FString Re
 		// Close socket
 		Connection->State = USOCK_Closed;
 		// Add to banlist for this level
-		if (Connection != NULL && useBanList)
-		{
+		if (Connection != NULL && useBanList) {
 			banList = banList+ConStr;
 			banList = banList+TEXT(":");
 		}
@@ -348,21 +322,18 @@ void FNetworkNotifyHook::CloseConnection( UNetConnection* Connection, FString Re
 /*-----------------------------------------------------------------------------
 	ASCFNative::execHookNet - Hook the UNetDriver
 -----------------------------------------------------------------------------*/
-void ASCFNative::execHookNet (FFrame& Stack, RESULT_DECL)
-{
+void ASCFNative::execHookNet (FFrame& Stack, RESULT_DECL) {
 	guard(ASCFNative::execHookNet);
 	P_GET_UBOOL(bUseList);
 	P_FINISH;
 
 	// Try to destroy if it's still there
-	if (netHook)
-	{
+	if (netHook) {
 		try
 		{
 			delete netHook;
 		}
-		catch(...)
-		{
+		catch(...) {
 		}
 	}
 
@@ -372,17 +343,14 @@ void ASCFNative::execHookNet (FFrame& Stack, RESULT_DECL)
 	netHook = new FNetworkNotifyHook;
 
 	// Fail? Shouldn't happen.
-	if (!netHook)
-	{
+	if (!netHook) {
 		*(DWORD*)Result=0;
 		return;
 	}
 
 	// Find NetDriver and hook
-	for (TObjectIterator<UNetDriver> It; It; ++It)
-	{
-		if (It->Notify != netHook)
-		{
+	for (TObjectIterator<UNetDriver> It; It; ++It) {
+		if (It->Notify != netHook) {
 			netHook->OriginalNotify = It->Notify;
 			It->Notify = netHook;
 		}
@@ -405,8 +373,7 @@ void ASCFNative::execHookNet (FFrame& Stack, RESULT_DECL)
 /*-----------------------------------------------------------------------------
 	ASCFNative::execUnHookNet - Unhook the UNetDriver
 -----------------------------------------------------------------------------*/
-void ASCFNative::execUnHookNet (FFrame& Stack, RESULT_DECL)
-{
+void ASCFNative::execUnHookNet (FFrame& Stack, RESULT_DECL) {
 	guard(ASCFNative::execUnHookNet);
 	P_FINISH;
 
@@ -415,10 +382,8 @@ void ASCFNative::execUnHookNet (FFrame& Stack, RESULT_DECL)
 		return;
 
 	// Find NetDriver and unhook
-	for (TObjectIterator<UNetDriver> It; It; ++It)
-	{
-		if (It->Notify == netHook)
-		{
+	for (TObjectIterator<UNetDriver> It; It; ++It) {
+		if (It->Notify == netHook) {
 			It->Notify = netHook->OriginalNotify;
 		}
 	}
@@ -435,15 +400,14 @@ void ASCFNative::execUnHookNet (FFrame& Stack, RESULT_DECL)
 /*-----------------------------------------------------------------------------
 	ASCFNative::execHookDLO - Hook the DynamicLoadObject UFunction
 -----------------------------------------------------------------------------*/
-void ASCFNative::execHookDLO (FFrame& Stack, RESULT_DECL)
-{
+void ASCFNative::execHookDLO (FFrame& Stack, RESULT_DECL) {
 	guard(ASCFNative::execHookDLO);
 	P_FINISH;
 
-	if (!dloHook)
-	{
+	if (!dloHook) {
 		// Create objects
 		dloHook		= new DLOHook;
+		dloHook->AddToRoot(); // for prevent delete by GC
 		dloHelper	= new UFunctionHookHelper;
 		dloHook->Hook(dloHelper, TEXT("Function Core.Object.DynamicLoadObject"));
 	}
@@ -456,20 +420,21 @@ void ASCFNative::execHookDLO (FFrame& Stack, RESULT_DECL)
 /*-----------------------------------------------------------------------------
 	ASCFNative::execUnHookDLO - Unhook the DynamicLoadObject UFunction
 -----------------------------------------------------------------------------*/
-void ASCFNative::execUnHookDLO (FFrame& Stack, RESULT_DECL)
-{
+void ASCFNative::execUnHookDLO (FFrame& Stack, RESULT_DECL) {
 	guard(ASCFNative::execUnHookDLO);
 	P_FINISH;
 
 	// Not hooked?
-	if (!dloHook)
+	if (!dloHook) {
 		return;
+	}
 
 	// Restore
 	dloHook->UnHook(dloHelper);
 
 	// Clean up
-	delete dloHook;
+	//delete dloHook;
+	dloHook->RemoveFromRoot(); // allow delete by GC
 	delete dloHelper;
 
 	// Fix pointer
@@ -482,8 +447,7 @@ void ASCFNative::execUnHookDLO (FFrame& Stack, RESULT_DECL)
 /*-----------------------------------------------------------------------------
 	ASCFNative::execHookAppSeconds
 -----------------------------------------------------------------------------*/
-void ASCFNative::execHookAppSeconds(FFrame& Stack, RESULT_DECL)
-{
+void ASCFNative::execHookAppSeconds(FFrame& Stack, RESULT_DECL) {
 	P_FINISH;
 
 	// On linux this is limited to setting GTimestamp to false. This will switch
@@ -503,8 +467,7 @@ void ASCFNative::execHookAppSeconds(FFrame& Stack, RESULT_DECL)
 /*-----------------------------------------------------------------------------
 	ASCFNative::execRequestTimer
 -----------------------------------------------------------------------------*/
-void ASCFNative::execRequestTimer(FFrame& Stack, RESULT_DECL)
-{
+void ASCFNative::execRequestTimer(FFrame& Stack, RESULT_DECL) {
 	P_FINISH;
 
 	*(DWORD*)Result = appRequestTimer();
@@ -513,8 +476,7 @@ void ASCFNative::execRequestTimer(FFrame& Stack, RESULT_DECL)
 /*-----------------------------------------------------------------------------
 	ASCFNative::execSetAffinity
 -----------------------------------------------------------------------------*/
-void ASCFNative::execSetAffinity(FFrame& Stack, RESULT_DECL)
-{
+void ASCFNative::execSetAffinity(FFrame& Stack, RESULT_DECL) {
 	P_GET_INT(CPUCore);
 	P_FINISH;
 
@@ -528,8 +490,7 @@ void ASCFNative::execSetAffinity(FFrame& Stack, RESULT_DECL)
 /*-----------------------------------------------------------------------------
 	ASCFNative::execInstallHandlers
 -----------------------------------------------------------------------------*/
-void ASCFNative::execInstallHandlers(FFrame& Stack, RESULT_DECL)
-{
+void ASCFNative::execInstallHandlers(FFrame& Stack, RESULT_DECL) {
 	P_FINISH;
 
 	appInstallHandlers();
@@ -539,8 +500,7 @@ void ASCFNative::execInstallHandlers(FFrame& Stack, RESULT_DECL)
 /*-----------------------------------------------------------------------------
 	ASCFNative::execGetPlatform
 -----------------------------------------------------------------------------*/
-void ASCFNative::execGetPlatform(FFrame& Stack, RESULT_DECL)
-{
+void ASCFNative::execGetPlatform(FFrame& Stack, RESULT_DECL) {
 	P_FINISH;
 
 	*(DWORD*)Result = appGetPlatform();
@@ -549,12 +509,10 @@ void ASCFNative::execGetPlatform(FFrame& Stack, RESULT_DECL)
 /*-----------------------------------------------------------------------------
 	ASCFNative::execHookMalloc
 -----------------------------------------------------------------------------*/
-void ASCFNative::execHookMalloc(FFrame& Stack, RESULT_DECL)
-{
+void ASCFNative::execHookMalloc(FFrame& Stack, RESULT_DECL) {
 	P_FINISH;
 
-	if (!mallocHook)
-	{
+	if (!mallocHook) {
 		mallocHook = new SCFThreadSafeMalloc;
 		mallocHook->InitThreadSafeMalloc((FMalloc*)GMalloc);
 	}
@@ -565,14 +523,13 @@ void ASCFNative::execHookMalloc(FFrame& Stack, RESULT_DECL)
 /*-----------------------------------------------------------------------------
 	ASCFNative::execHookExec - Hook execConsoleCommand
 -----------------------------------------------------------------------------*/
-void ASCFNative::execHookExec (FFrame& Stack, RESULT_DECL)
-{
+void ASCFNative::execHookExec (FFrame& Stack, RESULT_DECL) {
 	guard(ASCFNative::execHookExec);
 	P_FINISH;
 
-	if (!execHook)
-	{
+	if (!execHook) {
 		execHook	= new ExecHook;
+		execHook->AddToRoot(); // for prevent delete by GC
 		execHelper	= new UFunctionHookHelper;
 		execHook->Hook(execHelper, TEXT("Function Engine.Actor.ConsoleCommand"));
 	}
@@ -585,8 +542,7 @@ void ASCFNative::execHookExec (FFrame& Stack, RESULT_DECL)
 /*-----------------------------------------------------------------------------
 	ASCFNative::execUnHookExec - Unhook the execConsoleCommand
 -----------------------------------------------------------------------------*/
-void ASCFNative::execUnHookExec (FFrame& Stack, RESULT_DECL)
-{
+void ASCFNative::execUnHookExec (FFrame& Stack, RESULT_DECL) {
 	guard(ASCFNative::execUnHookExec);
 	P_FINISH;
 
@@ -598,7 +554,8 @@ void ASCFNative::execUnHookExec (FFrame& Stack, RESULT_DECL)
 	execHook->UnHook(execHelper);
 
 	// Clean up
-	delete execHook;
+	//delete execHook;
+	execHook->RemoveFromRoot(); // allow delete by GC
 	delete execHelper;
 
 	// Fix pointer
@@ -623,39 +580,29 @@ public:
 	SCFLogHook()
 	: LogAr( NULL )	
 	, Opened( 0 )
-	, Dead( 0 )
-	{
+	, Dead( 0 ) {
 		Filename[0]=0;
 	}
-	~SCFLogHook()
-	{
-		if( LogAr )
-		{
+	~SCFLogHook() {
+		if( LogAr ) {
 			Logf( NAME_Log, TEXT("Log file closed, %s"), appTimestamp() );
 			delete LogAr;
 			LogAr = NULL;
 		}
 	}
-	void Serialize(const TCHAR* Data, enum EName Event)
-	{
+	void Serialize(const TCHAR* Data, enum EName Event) {
 		//guard(SCFLogHook::Serialize);
-		if (HasLogFile)
-		{
+		if (HasLogFile) {
 			static UBOOL Entry=0;
-			if( !GIsCriticalError || Entry )
-			{
-				if( !FName::SafeSuppressed(Event) )
-				{
-					if( !LogAr && !Dead )
-					{
+			if( !GIsCriticalError || Entry ) {
+				if( !FName::SafeSuppressed(Event) ) {
+					if( !LogAr && !Dead ) {
 						// Make log filename.
-						if( !Filename[0] )
-						{
+						if( !Filename[0] ) {
 							appStrcpy( Filename, appBaseDir() );
 							if
 							(	!Parse(appCmdLine(), TEXT("LOG="), Filename+appStrlen(Filename), ARRAY_COUNT(Filename)-appStrlen(Filename) )
-							&&	!Parse(appCmdLine(), TEXT("ABSLOG="), Filename, ARRAY_COUNT(Filename) ) )
-							{
+							&&	!Parse(appCmdLine(), TEXT("ABSLOG="), Filename, ARRAY_COUNT(Filename) ) ) {
 								appStrcat( Filename, appPackage() );
 								appStrcat( Filename, TEXT(".log") );
 							}
@@ -665,15 +612,13 @@ public:
 						// Open log file.
 						//printf("opening log: %s\n", TCHAR_TO_ANSI(Filename));
 						LogAr = GFileManager->CreateFileWriter( Filename, FILEWRITE_AllowRead|FILEWRITE_Unbuffered|(Opened?FILEWRITE_Append:0));
-						if( LogAr )
-						{
+						if( LogAr ) {
 							Opened = 1;
 							Logf( NAME_Log, TEXT("Log file open, %s"), appTimestamp() );
 						}
 						else Dead = 1;
 					}
-					if( LogAr && Event!=NAME_Title )
-					{
+					if( LogAr && Event!=NAME_Title ) {
 						TCHAR Ch[1024];
 						ANSICHAR ACh[1024];
 						appSprintf( Ch, TEXT("%s: %s%s"), FName::SafeString(Event), Data, LINE_TERMINATOR );
@@ -715,13 +660,11 @@ public:
 /*-----------------------------------------------------------------------------
 	SCFInit
 -----------------------------------------------------------------------------*/
-void SCFInit()
-{
+void SCFInit() {
 	GLog->Logf(TEXT("[SCF]: Early Load Hook"));
 	//GLog->Logf(TEXT("[SCF]: CmdLine: %s"), appCmdLine());
 	FString File = TEXT("");
-	if (Parse(appCmdLine(), TEXT("log"), File))
-	{
+	if (Parse(appCmdLine(), TEXT("log"), File)) {
 		HasLogFile = 1;
 		GLog->Logf(TEXT("[SCF]: This server is logging to a logfile..."));
 	}
@@ -735,7 +678,6 @@ void SCFInit()
 /*-----------------------------------------------------------------------------
 	SCFFini
 -----------------------------------------------------------------------------*/
-void SCFFini()
-{
+void SCFFini() {
 
 }

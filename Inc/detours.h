@@ -440,8 +440,7 @@ PDETOUR_SYM_INFO DetourLoadImageHlp(VOID);
 class CDetourEnableWriteOnCodePage
 {
 public:
-    CDetourEnableWriteOnCodePage(PBYTE pbCode, LONG cbCode = DETOUR_TRAMPOLINE_SIZE)
-    {
+    CDetourEnableWriteOnCodePage(PBYTE pbCode, LONG cbCode = DETOUR_TRAMPOLINE_SIZE) {
         m_pbCode = pbCode;
         m_cbCode = cbCode;
         m_dwOldPerm = 0;
@@ -460,8 +459,7 @@ public:
         }
     }
 
-    ~CDetourEnableWriteOnCodePage()
-    {
+    ~CDetourEnableWriteOnCodePage() {
         if (m_dwOldPerm && m_pbCode && m_cbCode) {
             DWORD dwTemp = 0;
             if (!FlushInstructionCache(m_hProcess, m_pbCode, m_cbCode)) {
@@ -473,8 +471,7 @@ public:
         }
     }
 
-    BOOL SetPermission(DWORD dwPerms)
-    {
+    BOOL SetPermission(DWORD dwPerms) {
         if (m_dwOldPerm && m_pbCode && m_cbCode) {
             m_dwOldPerm = dwPerms;
             return TRUE;
@@ -482,8 +479,7 @@ public:
         return FALSE;
     }
 
-    BOOL IsValid(VOID)
-    {
+    BOOL IsValid(VOID) {
         return m_pbCode && m_cbCode && m_dwOldPerm;
     }
 
@@ -496,83 +492,71 @@ private:
 
 //////////////////////////////////////////////////////////////////////////////
 //
-inline PBYTE DetourGenMovEax(PBYTE pbCode, UINT32 nValue)
-{
+inline PBYTE DetourGenMovEax(PBYTE pbCode, UINT32 nValue) {
     *pbCode++ = 0xB8;
     *((UINT32*&)pbCode)++ = nValue;
     return pbCode;
 }
 
-inline PBYTE DetourGenMovEbx(PBYTE pbCode, UINT32 nValue)
-{
+inline PBYTE DetourGenMovEbx(PBYTE pbCode, UINT32 nValue) {
     *pbCode++ = 0xBB;
     *((UINT32*&)pbCode)++ = nValue;
     return pbCode;
 }
 
-inline PBYTE DetourGenMovEcx(PBYTE pbCode, UINT32 nValue)
-{
+inline PBYTE DetourGenMovEcx(PBYTE pbCode, UINT32 nValue) {
     *pbCode++ = 0xB9;
     *((UINT32*&)pbCode)++ = nValue;
     return pbCode;
 }
 
-inline PBYTE DetourGenMovEdx(PBYTE pbCode, UINT32 nValue)
-{
+inline PBYTE DetourGenMovEdx(PBYTE pbCode, UINT32 nValue) {
     *pbCode++ = 0xBA;
     *((UINT32*&)pbCode)++ = nValue;
     return pbCode;
 }
 
-inline PBYTE DetourGenMovEsi(PBYTE pbCode, UINT32 nValue)
-{
+inline PBYTE DetourGenMovEsi(PBYTE pbCode, UINT32 nValue) {
     *pbCode++ = 0xBE;
     *((UINT32*&)pbCode)++ = nValue;
     return pbCode;
 }
 
-inline PBYTE DetourGenMovEdi(PBYTE pbCode, UINT32 nValue)
-{
+inline PBYTE DetourGenMovEdi(PBYTE pbCode, UINT32 nValue) {
     *pbCode++ = 0xBF;
     *((UINT32*&)pbCode)++ = nValue;
     return pbCode;
 }
 
-inline PBYTE DetourGenMovEbp(PBYTE pbCode, UINT32 nValue)
-{
+inline PBYTE DetourGenMovEbp(PBYTE pbCode, UINT32 nValue) {
     *pbCode++ = 0xBD;
     *((UINT32*&)pbCode)++ = nValue;
     return pbCode;
 }
 
-inline PBYTE DetourGenMovEsp(PBYTE pbCode, UINT32 nValue)
-{
+inline PBYTE DetourGenMovEsp(PBYTE pbCode, UINT32 nValue) {
     *pbCode++ = 0xBC;
     *((UINT32*&)pbCode)++ = nValue;
     return pbCode;
 }
 
-inline PBYTE DetourGenPush(PBYTE pbCode, UINT32 nValue)
-{
+inline PBYTE DetourGenPush(PBYTE pbCode, UINT32 nValue) {
     *pbCode++ = 0x68;
     *((UINT32*&)pbCode)++ = nValue;
     return pbCode;
 }
 
-inline PBYTE DetourGenPushad(PBYTE pbCode)
-{
+inline PBYTE DetourGenPushad(PBYTE pbCode) {
     *pbCode++ = 0x60;
     return pbCode;
 }
 
-inline PBYTE DetourGenPopad(PBYTE pbCode)
-{
+inline PBYTE DetourGenPopad(PBYTE pbCode) {
     *pbCode++ = 0x61;
     return pbCode;
 }
 
-inline PBYTE DetourGenJmp(PBYTE pbCode, PBYTE pbJmpDst, PBYTE pbJmpSrc = 0)
-{
+inline PBYTE DetourGenJmp(PBYTE pbCode, PBYTE pbJmpDst, PBYTE pbJmpSrc = 0) {
     if (pbJmpSrc == 0) {
         pbJmpSrc = pbCode;
     }
@@ -581,8 +565,7 @@ inline PBYTE DetourGenJmp(PBYTE pbCode, PBYTE pbJmpDst, PBYTE pbJmpSrc = 0)
     return pbCode;
 }
 
-inline PBYTE DetourGenCall(PBYTE pbCode, PBYTE pbJmpDst, PBYTE pbJmpSrc = 0)
-{
+inline PBYTE DetourGenCall(PBYTE pbCode, PBYTE pbJmpDst, PBYTE pbJmpSrc = 0) {
     if (pbJmpSrc == 0) {
         pbJmpSrc = pbCode;
     }
@@ -591,20 +574,17 @@ inline PBYTE DetourGenCall(PBYTE pbCode, PBYTE pbJmpDst, PBYTE pbJmpSrc = 0)
     return pbCode;
 }
 
-inline PBYTE DetourGenBreak(PBYTE pbCode)
-{
+inline PBYTE DetourGenBreak(PBYTE pbCode) {
     *pbCode++ = 0xcc;
     return pbCode;
 }
 
-inline PBYTE DetourGenRet(PBYTE pbCode)
-{
+inline PBYTE DetourGenRet(PBYTE pbCode) {
     *pbCode++ = 0xc3;
     return pbCode;
 }
 
-inline PBYTE DetourGenNop(PBYTE pbCode)
-{
+inline PBYTE DetourGenNop(PBYTE pbCode) {
     *pbCode++ = 0x90;
     return pbCode;
 }

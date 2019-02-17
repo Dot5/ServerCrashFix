@@ -39,16 +39,14 @@ PVOID	pOldAppSecondsSlow	= NULL;		// Hooked func
 /*-----------------------------------------------------------------------------
 	TFAppSecondsSlow - 
 -----------------------------------------------------------------------------*/
-FTime TFAppSecondsSlow()
-{
+FTime TFAppSecondsSlow() {
 	static DWORD  OldTime   = timeGetTime();
 	static DOUBLE TimeInSec = 0.0;
 
 	DWORD NewTime  = timeGetTime();
 	
 	// Fix for buggy timers
-	if (NewTime > OldTime)
-	{
+	if (NewTime > OldTime) {
 		TimeInSec	  += (NewTime - OldTime) / 1000.0;
 		OldTime    	   = NewTime;
 	}
@@ -61,8 +59,7 @@ FTime TFAppSecondsSlow()
 /*-----------------------------------------------------------------------------
 	TFGetCorrection
 -----------------------------------------------------------------------------*/
-FLOAT TFGetCorrection()
-{
+FLOAT TFGetCorrection() {
 	return appSeconds().GetFloat() - TFAppSecondsSlow().GetFloat();
 }
 
@@ -72,8 +69,7 @@ FLOAT TFGetCorrection()
 //
 // Platform: 1 = windows, 2 = linux 
 //
-DWORD FORCEINLINE appGetPlatform()
-{
+DWORD FORCEINLINE appGetPlatform() {
 	return 1;
 }
 
@@ -81,12 +77,10 @@ DWORD FORCEINLINE appGetPlatform()
 // Request highest possible resolution (usually 1ms)
 // -> return 0 on linux or on error
 //
-DWORD appRequestTimer()
-{
+DWORD appRequestTimer() {
 	TIMECAPS caps;	
 
-	if (timeGetDevCaps(&caps, sizeof(caps)) == MMSYSERR_NOERROR)
-	{
+	if (timeGetDevCaps(&caps, sizeof(caps)) == MMSYSERR_NOERROR) {
 		timeBeginPeriod(caps.wPeriodMin);
 		return caps.wPeriodMin;
 	}
@@ -97,15 +91,13 @@ DWORD appRequestTimer()
 //
 // Change appSecondsSlow from GetTickCount to timeGetTime
 //
-UBOOL appHookAppSeconds()
-{
+UBOOL appHookAppSeconds() {
 	HMODULE hCore			= GetModuleHandle(L"Core.dll");
 	FARPROC pAppSecondsSlow	= NULL;
 	if (hCore)
 		pAppSecondsSlow	= GetProcAddress(hCore, "?appSecondsSlow@@YA?AVFTime@@XZ");
 
-	if (pAppSecondsSlow)
-	{
+	if (pAppSecondsSlow) {
 		pOldAppSecondsSlow	= DetourFunction((PBYTE)pAppSecondsSlow, (PBYTE)&TFAppSecondsSlow);
 		GTimestamp			= 0;
 		Correction			= TFGetCorrection();
@@ -119,16 +111,14 @@ UBOOL appHookAppSeconds()
 // Install custom signal handlers for crash reporting
 //	-> Not on windows
 //
-UBOOL appInstallHandlers()
-{
+UBOOL appInstallHandlers() {
 	return FALSE;
 }
 
 // 
 // Force CPU Core affinity
 //
-INT appSetAffinity(INT CPUCore)
-{
+INT appSetAffinity(INT CPUCore) {
 	static INT CPUSet = 0;
 
 	if (CPUSet != 0)
@@ -136,8 +126,7 @@ INT appSetAffinity(INT CPUCore)
 	
 	SYSTEM_INFO SI;
 	GetSystemInfo( &SI );
-	if (CPUCore > (int)SI.dwNumberOfProcessors-1)
-	{
+	if (CPUCore > (int)SI.dwNumberOfProcessors-1) {
 		GLog->Logf(TEXT("[SCF] appSetAffinity ERROR"));
 		GLog->Logf(TEXT("[SCF] CPUCore (user-defined): %d"), CPUCore);
 		GLog->Logf(TEXT("[SCF] dwNumberOfProcessors (SYSTEM_INFO): %d"), SI.dwNumberOfProcessors);

@@ -10,8 +10,7 @@
 /*-----------------------------------------------------------------------------
 	FNetworkNotifyHook - Original FNetworkNotify in UnLevel.h
 -----------------------------------------------------------------------------*/
-class FNetworkNotifyHook : public FNetworkNotify
-{
+class FNetworkNotifyHook : public FNetworkNotify {
 public:
 	// Reference to the original FNetworkNotify -> Must be restored on mapswitch
 	FNetworkNotify* OriginalNotify;
@@ -42,28 +41,30 @@ public:
 /*-----------------------------------------------------------------------------
 	Can't properly add fields to a UObject without mirroring them in uscript
 -----------------------------------------------------------------------------*/
-class UFunctionHookHelper
-{
+class UFunctionHookHelper {
 public:
-	void InitHelper(UFunction* UFunc, Native OldFunc, Native NewFunc)
-	{
+	void InitHelper(UFunction* UFunc, Native OldFunc, Native NewFunc) {
 		OriginalUFunction	= UFunc;
 		Old					= OldFunc;
 		Func				= NewFunc;
 	}
 
-	void Hook()
-	{
-		OriginalUFunction->Func	= Func;
+	void Hook() {
+		if (Func != Old) {
+			OriginalUFunction->Func	= Func;
+		}
 	}
 
-	void UnHook()
-	{
+	void UnHook() {
 		OriginalUFunction->Func = Old;
 	}
 
-	void CallFunction(FFrame& Stack, RESULT_DECL)
-	{
+	void UnHookFinal() {
+		UnHook();
+		Func = Old; // for prevent restore hook
+	}
+
+	void CallFunction(FFrame& Stack, RESULT_DECL) {
 		UnHook();
 		Stack.Node->CallFunction(Stack, Result, OriginalUFunction);
 		Hook();
@@ -81,47 +82,45 @@ private:
 
 	TODO: Add GNatives hooking for registered natives?
 -----------------------------------------------------------------------------*/
-class UFunctionHook : public UObject
-{
+class UFunctionHook : public UObject {
 public:
 	virtual Native GetNewFunc()=0;
 	
 	UFunctionHook() {};
 
-	void Hook(UFunctionHookHelper* Helper, FString FuncName)
- 	{
+	void Hook(UFunctionHookHelper* Helper, FString FuncName) {
 		UFunction* OriginalUFunction = NULL;
 
-		for (TObjectIterator<UFunction> It; It; ++It)
-		{
-			if (appStrcmp(It->GetFullName(), *FuncName) == 0)
-			{
+		for (TObjectIterator<UFunction> It; It; ++It) {
+			if (appStrcmp(It->GetFullName(), *FuncName) == 0) {
 				OriginalUFunction = *It;
 				break;
 			}
 		}
 		
-		if (OriginalUFunction)
-		{
+		if (OriginalUFunction) {
 			Helper->InitHelper(OriginalUFunction, OriginalUFunction->Func, GetNewFunc());
 			Helper->Hook();
-			//GLog->Logf(TEXT("[SCF] Hooked : %s (0x%08X)"), OriginalUFunction->GetFullName(), OriginalUFunction);
 		}
 	}
 
-	void UnHook(UFunctionHookHelper* Helper)
-	{
-		Helper->UnHook();
-	}	
+	void UnHook(UFunctionHookHelper* Helper) {
+		Helper->UnHookFinal();
+	}
+
+	virtual ~UFunctionHook() {
+	}
+
+	void operator delete(void* Object, size_t Size) {
+		UObject::operator delete(Object, Size);
+	}
 };
 
-class DLOHook : public UFunctionHook
-{
+class DLOHook : public UFunctionHook {
 	void NewFunc(FFrame& Stack, RESULT_DECL);
 	Native GetNewFunc();
 };
-class ExecHook : public UFunctionHook
-{
+class ExecHook : public UFunctionHook {
 	void NewFunc(FFrame& Stack, RESULT_DECL);
 	Native GetNewFunc();
 };
@@ -129,20 +128,17 @@ class ExecHook : public UFunctionHook
 /*-----------------------------------------------------------------------------
 	SCFScopedLock - Scoped critical section
 -----------------------------------------------------------------------------*/
-class SCFScopedLock
-{
+class SCFScopedLock {
 private:
 	LOCKTYPE* Lock;
 
 public:
-	SCFScopedLock(LOCKTYPE* lLock)
-	{
+	SCFScopedLock(LOCKTYPE* lLock) {
 		Lock = lLock;
 		LOCK(lLock);
 	}
 
-	~SCFScopedLock()
-	{
+	~SCFScopedLock() {
 		UNLOCK(Lock);
 	}
 };
@@ -150,8 +146,7 @@ public:
 /*-----------------------------------------------------------------------------
 	SCFThreadSafeMalloc - Original Malloc was not thread safe :(
 -----------------------------------------------------------------------------*/
-class SCFThreadSafeMalloc : public FMalloc
-{		
+class SCFThreadSafeMalloc : public FMalloc {
 public:
 	void* Malloc( DWORD Count, const TCHAR* Tag );
 	void* Realloc( void* Original, DWORD Count, const TCHAR* Tag );
@@ -172,8 +167,7 @@ private:
 	InitThreadSafeMalloc - Initializes critical section object and redirects
 	GMalloc. MUST BE CALLED IN MAIN UT THREAD!!!
 -----------------------------------------------------------------------------*/
-void SCFThreadSafeMalloc::InitThreadSafeMalloc(FMalloc *OldMalloc)
-{
+void SCFThreadSafeMalloc::InitThreadSafeMalloc(FMalloc *OldMalloc) {
 	INIT_LOCK(SCFMallocLock);
 	OldFMalloc = OldMalloc;
 	GMalloc = this;	
@@ -183,16 +177,14 @@ void SCFThreadSafeMalloc::InitThreadSafeMalloc(FMalloc *OldMalloc)
 	ExitThreadSafeMalloc - Uninitializes critical section object and restores
 	GMalloc. MUST BE CALLED IN MAIN UT THREAD!!!
 -----------------------------------------------------------------------------*/
-void SCFThreadSafeMalloc::ExitThreadSafeMalloc()
-{
+void SCFThreadSafeMalloc::ExitThreadSafeMalloc() {
 	GMalloc = OldFMalloc;
 }
 
 /*-----------------------------------------------------------------------------
 	Malloc
 -----------------------------------------------------------------------------*/
-void* SCFThreadSafeMalloc::Malloc(DWORD Count, const TCHAR *Tag)
-{	
+void* SCFThreadSafeMalloc::Malloc(DWORD Count, const TCHAR *Tag) {
 	SCFScopedLock((LOCKTYPE*)&SCFMallocLock);
 	return OldFMalloc->Malloc(Count, Tag);
 }
@@ -200,8 +192,7 @@ void* SCFThreadSafeMalloc::Malloc(DWORD Count, const TCHAR *Tag)
 /*-----------------------------------------------------------------------------
 	Realloc
 -----------------------------------------------------------------------------*/
-void* SCFThreadSafeMalloc::Realloc(void *Original, DWORD Count, const TCHAR *Tag)
-{	
+void* SCFThreadSafeMalloc::Realloc(void *Original, DWORD Count, const TCHAR *Tag) {
 	SCFScopedLock((LOCKTYPE*)&SCFMallocLock);
 	return OldFMalloc->Realloc(Original, Count, Tag);
 }
@@ -209,8 +200,7 @@ void* SCFThreadSafeMalloc::Realloc(void *Original, DWORD Count, const TCHAR *Tag
 /*-----------------------------------------------------------------------------
 	Free
 -----------------------------------------------------------------------------*/
-void SCFThreadSafeMalloc::Free(void *Original)
-{	
+void SCFThreadSafeMalloc::Free(void *Original) {
 	SCFScopedLock((LOCKTYPE*)&SCFMallocLock);
 	OldFMalloc->Free(Original);
 }
@@ -218,8 +208,7 @@ void SCFThreadSafeMalloc::Free(void *Original)
 /*-----------------------------------------------------------------------------
 	DumpAllocs
 -----------------------------------------------------------------------------*/
-void SCFThreadSafeMalloc::DumpAllocs()
-{
+void SCFThreadSafeMalloc::DumpAllocs() {
 	SCFScopedLock((LOCKTYPE*)&SCFMallocLock);
 	OldFMalloc->DumpAllocs();
 }
@@ -227,8 +216,7 @@ void SCFThreadSafeMalloc::DumpAllocs()
 /*-----------------------------------------------------------------------------
 	HeapCheck
 -----------------------------------------------------------------------------*/
-void SCFThreadSafeMalloc::HeapCheck()
-{
+void SCFThreadSafeMalloc::HeapCheck() {
 	SCFScopedLock((LOCKTYPE*)&SCFMallocLock);
 	OldFMalloc->HeapCheck();
 }
@@ -236,8 +224,7 @@ void SCFThreadSafeMalloc::HeapCheck()
 /*-----------------------------------------------------------------------------
 	Init
 -----------------------------------------------------------------------------*/
-void SCFThreadSafeMalloc::Init()
-{
+void SCFThreadSafeMalloc::Init() {
 	SCFScopedLock((LOCKTYPE*)&SCFMallocLock);
 	OldFMalloc->Init();
 }
@@ -245,8 +232,7 @@ void SCFThreadSafeMalloc::Init()
 /*-----------------------------------------------------------------------------
 	Exit
 -----------------------------------------------------------------------------*/
-void SCFThreadSafeMalloc::Exit()
-{
+void SCFThreadSafeMalloc::Exit() {
 	SCFScopedLock((LOCKTYPE*)&SCFMallocLock);
 	OldFMalloc->Exit();
 }
